@@ -4,6 +4,11 @@ import '../styles/global.css';
 
 // Always ends with "/", whether the app is served from the root or a subpath.
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+
+const title = 'Neon Cruise · Nightride FM';
+const description = 'A retro outrun cassette player for the Nightride FM synthwave radio network.';
+const pageUrl = new URL(base, Astro.site).href;
+const ogImage = new URL(`${base}og.png`, Astro.site).href;
 ---
 
 <!doctype html>
@@ -11,8 +16,24 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Neon Cruise · Nightride FM</title>
-    <meta name="description" content="A retro outrun cassette player for the Nightride FM synthwave radio network." />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={pageUrl} />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Neon Cruise" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={pageUrl} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Neon Cruise: a pink cassette over a neon outrun sunset and grid" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
     <meta name="theme-color" content="#05020a" />
     <meta name="color-scheme" content="dark" />
 
@@ -23,6 +44,16 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Neon Cruise" />
+
+    <!-- Catch Chrome's install prompt as early as possible; the app module loads later and reads it. -->
+    <script is:inline>
+      window.__bip = null;
+      addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        window.__bip = e;
+        dispatchEvent(new Event('bip-ready'));
+      });
+    </script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

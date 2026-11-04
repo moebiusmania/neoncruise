@@ -3,12 +3,13 @@ import { STATIONS, TOTAL, tapeCode, tapeNum } from '../../lib/stations';
 import { insert, station, stationIdx, wantPlay } from '../../lib/player';
 import { tracks } from '../../lib/meta';
 import { useUnwrappedHue } from '../../lib/hooks';
+import { canInstall, promptInstall } from '../../lib/pwa';
 import { Horizon } from '../shared/Horizon';
 import { Cassette } from '../shared/Cassette';
 import { Spectrum } from '../shared/Spectrum';
 import { PlayButton, RoundButton, StatusPill, useNowTrack } from '../shared/Bits';
 import { AudioSettings, Card, FxToggles, MiniPlayer, SleepTimer } from '../shared/Panels';
-import { ChevronLeft, ChevronRight, FxIcon, ShelfIcon } from '../shared/Icons';
+import { ChevronLeft, ChevronRight, FxIcon, InstallIcon, ShelfIcon } from '../shared/Icons';
 import s from './MobileApp.module.css';
 
 export type Screen = 'now' | 'shelf' | 'fx';
@@ -239,6 +240,12 @@ function FxScreen({ onBack }: { onBack: () => void }) {
         <div class={s.barRight} />
       </header>
       <div class={s.scroll}>
+        {canInstall.value && (
+          <button class={s.install} onClick={promptInstall}>
+            <InstallIcon class={s.installIco} />
+            INSTALL APP
+          </button>
+        )}
         <Card>
           <FxToggles />
         </Card>

@@ -416,6 +416,19 @@
   margin: 0 16px;
 }
 
+.install {
+  composes: insert;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.installIco {
+  height: 18px;
+}
+
 @media (max-height: 640px) {
   .stationBlock {
     padding-top: 8px;
