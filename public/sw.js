@@ -1,5 +1,5 @@
 // Neon Cruise service worker: offline app shell, never touches the live audio or metadata streams.
-const VERSION = 'neoncruise-v2';
+const VERSION = 'neoncruise-v3';
 // Works at the domain root or under a subpath (e.g. GitHub Pages /<repo>/).
 const BASE = new URL('./', self.location).pathname;
 const SHELL = ['', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'].map((p) => BASE + p);
