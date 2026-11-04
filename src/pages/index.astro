@@ -1,6 +1,9 @@
 ---
 import App from '../components/App';
 import '../styles/global.css';
+
+// Always ends with "/", whether the app is served from the root or a subpath.
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 ---
 
 <!doctype html>
@@ -13,9 +16,9 @@ import '../styles/global.css';
     <meta name="theme-color" content="#05020a" />
     <meta name="color-scheme" content="dark" />
 
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="manifest" href={`${base}manifest.webmanifest`} />
+    <link rel="icon" href={`${base}icons/icon.svg`} type="image/svg+xml" />
+    <link rel="apple-touch-icon" href={`${base}icons/apple-touch-icon.png`} />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -37,7 +40,8 @@ import '../styles/global.css';
     <noscript>Neon Cruise needs JavaScript to tune in.</noscript>
     <script>
       if ('serviceWorker' in navigator && import.meta.env.PROD) {
-        addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+        const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+        addEventListener('load', () => navigator.serviceWorker.register(`${base}sw.js`, { scope: base }));
       }
     </script>
   </body>

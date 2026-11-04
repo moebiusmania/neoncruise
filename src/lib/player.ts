@@ -297,7 +297,8 @@ function initEffects() {
 
   if ('mediaSession' in navigator) {
     const ms = navigator.mediaSession;
-    const icon = (s: number) => ({ src: `/icons/icon-${s}.png`, sizes: `${s}x${s}`, type: 'image/png' });
+    const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+    const icon = (s: number) => ({ src: `${base}icons/icon-${s}.png`, sizes: `${s}x${s}`, type: 'image/png' });
     effect(() => {
       const st = station.value;
       const t = tracks.value[st.id];

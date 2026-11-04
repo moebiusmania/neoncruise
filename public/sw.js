@@ -1,6 +1,8 @@
 // Neon Cruise service worker: offline app shell, never touches the live audio or metadata streams.
-const VERSION = 'neoncruise-v1';
-const SHELL = ['/', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png'];
+const VERSION = 'neoncruise-v2';
+// Works at the domain root or under a subpath (e.g. GitHub Pages /<repo>/).
+const BASE = new URL('./', self.location).pathname;
+const SHELL = ['', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'].map((p) => BASE + p);
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -30,17 +32,17 @@ self.addEventListener('fetch', (event) => {
       fetch(req)
         .then((res) => {
           const copy = res.clone();
-          caches.open(VERSION).then((c) => c.put('/', copy));
+          caches.open(VERSION).then((c) => c.put(BASE, copy));
           return res;
         })
-        .catch(() => caches.match('/')),
+        .catch(() => caches.match(BASE)),
     );
     return;
   }
 
   // Hashed build assets and fonts: cache first.
   const immutable =
-    (url.origin === location.origin && url.pathname.startsWith('/_astro/')) ||
+    (url.origin === location.origin && url.pathname.startsWith(`${BASE}_astro/`)) ||
     url.hostname === 'fonts.gstatic.com';
   if (immutable) {
     event.respondWith(
