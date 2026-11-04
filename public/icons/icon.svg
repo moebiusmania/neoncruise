@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#05020a"/>
+      <stop offset="0.6" stop-color="#2a0a2c"/>
+      <stop offset="1" stop-color="#7a1550"/>
+    </linearGradient>
+    <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe9a8"/>
+      <stop offset="0.5" stop-color="#ff8a7a"/>
+      <stop offset="1" stop-color="#ff2f8e"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2c0a2a"/>
+      <stop offset="1" stop-color="#05020a"/>
+    </linearGradient>
+    <clipPath id="sunclip">
+      <rect x="0" y="0" width="512" height="300"/>
+    </clipPath>
+    <clipPath id="floorclip">
+      <rect x="0" y="300" width="512" height="212"/>
+    </clipPath>
+    <clipPath id="round"><rect width="512" height="512" rx="112"/></clipPath>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#05020a"/>
+  <g clip-path="url(#round)">
+    <g id="art">
+      <rect width="512" height="300" fill="url(#sky)"/>
+      <g clip-path="url(#sunclip)">
+        <circle cx="256" cy="232" r="140" fill="url(#sun)"/>
+        <g fill="#2a0a2c">
+          <rect x="0" y="236" width="512" height="5"/>
+          <rect x="0" y="254" width="512" height="8"/>
+          <rect x="0" y="272" width="512" height="11"/>
+          <rect x="0" y="290" width="512" height="14"/>
+        </g>
+      </g>
+      <path d="M0 300 L60 262 L110 284 L170 246 L222 288 L290 288 L340 250 L398 282 L452 256 L512 290 L512 300Z" fill="#07030d" stroke="#ff5cab" stroke-width="3"/>
+      <rect y="300" width="512" height="212" fill="url(#floor)"/>
+      <g clip-path="url(#floorclip)" stroke="#ff4fa3" stroke-width="3" fill="none">
+        <path d="M0 312H512M0 330H512M0 356H512M0 394H512M0 450H512"/>
+        <path d="M256 300V512M240 300 120 512M272 300 392 512M224 300 -16 512M288 300 528 512M208 300 -152 512M304 300 664 512"/>
+      </g>
+      <rect x="0" y="298" width="512" height="4" fill="#ffd1ec"/>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,190 @@
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border: 1px solid color-mix(in oklch, var(--acc) 55%, transparent);
+  border-radius: 3px;
+  background: rgb(5 2 10 / 0.5);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.4);
+  flex: none;
+
+  .pill[data-status='playing'] & {
+    --c: oklch(0.7 0.24 25);
+    background: var(--c);
+    box-shadow: 0 0 8px var(--c);
+    animation: blink 1.2s steps(1) infinite;
+  }
+  .pill[data-status='loading'] & {
+    --c: oklch(0.86 0.17 90);
+    background: var(--c);
+    box-shadow: 0 0 8px var(--c);
+    animation: blink 0.4s steps(1) infinite;
+  }
+  .pill[data-status='error'] & {
+    background: oklch(0.6 0.22 25);
+  }
+}
+
+/* ---------------------------------------------------------------- transport */
+
+.play {
+  --size: 76px;
+  width: var(--size);
+  height: var(--size);
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #05020a;
+  background: linear-gradient(160deg, var(--acc2), var(--acc) 70%);
+  box-shadow:
+    0 0 34px var(--acc-glow),
+    inset 0 2px 0 rgb(255 255 255 / 0.5);
+  transition: transform 0.15s, box-shadow 0.3s;
+  position: relative;
+
+  &:hover {
+    box-shadow:
+      0 0 48px var(--acc-glow),
+      inset 0 2px 0 rgb(255 255 255 / 0.5);
+  }
+  &:active {
+    transform: scale(0.94);
+  }
+
+  &[data-size='sm'] {
+    --size: 44px;
+    background: var(--acc);
+    box-shadow: none;
+  }
+
+  &[data-loading]::after {
+    content: '';
+    position: absolute;
+    inset: -5px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    border-top-color: var(--acc2);
+    animation: spin 0.9s linear infinite;
+  }
+}
+
+.pauseIco {
+  width: calc(var(--size) * 0.26);
+}
+.playIco {
+  width: calc(var(--size) * 0.31);
+  margin-left: calc(var(--size) * 0.08);
+}
+
+.round {
+  width: 52px;
+  height: 52px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: rgb(5 2 10 / 0.5);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  transition: border-color 0.2s, background 0.2s, transform 0.15s;
+
+  &:hover {
+    border-color: var(--acc);
+    background: color-mix(in oklch, var(--acc) 14%, rgb(5 2 10 / 0.6));
+  }
+  &:active {
+    transform: scale(0.92);
+  }
+}
+
+.skipIco {
+  width: 18px;
+}
+
+/* ---------------------------------------------------------------- overlays */
+
+.scan,
+.flicker,
+.noise,
+.vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.scan {
+  z-index: 40;
+  opacity: 0.5;
+  background-image: repeating-linear-gradient(0deg, rgb(0 0 0 / 0.4) 0 1px, transparent 1px 3px);
+}
+
+.flicker {
+  z-index: 41;
+  background: #000;
+  animation: flick 3.7s steps(1) infinite;
+}
+
+.noise {
+  z-index: 42;
+  opacity: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1.4 -.2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  transition: opacity 0.25s;
+
+  &[data-on] {
+    opacity: 0.09;
+    animation: grain 0.4s steps(1) infinite;
+  }
+  &[data-burst] {
+    opacity: 0.16;
+    mix-blend-mode: overlay;
+    animation: grain 0.12s steps(1) infinite;
+    transition: opacity 0.08s;
+  }
+}
+
+.vignette {
+  z-index: 43;
+  background: radial-gradient(120% 90% at 50% 50%, transparent 58%, rgb(0 0 0 / 0.55));
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0.15; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes flick {
+  0% { opacity: 0; }
+  4% { opacity: 0.06; }
+  8% { opacity: 0; }
+  41% { opacity: 0; }
+  43% { opacity: 0.09; }
+  45% { opacity: 0.02; }
+  70% { opacity: 0; }
+  72% { opacity: 0.05; }
+  100% { opacity: 0; }
+}
+
+@keyframes grain {
+  0% { background-position: 0 0; }
+  25% { background-position: -37px 22px; }
+  50% { background-position: 18px -41px; }
+  75% { background-position: -9px 33px; }
+  100% { background-position: 0 0; }
+}

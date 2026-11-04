@@ -1,0 +1,108 @@
+@property --hue {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 350;
+}
+
+:root {
+  color-scheme: dark;
+  --bg: #05020a;
+  --ink: #f6f0fb;
+  --ink-2: rgb(255 255 255 / 0.74);
+  --ink-3: rgb(255 255 255 / 0.55);
+  --line: rgb(255 255 255 / 0.2);
+  --line-soft: rgb(255 255 255 / 0.08);
+  --glass: rgb(5 2 10 / 0.74);
+
+  --font-display: 'Syncopate', 'Arial Black', sans-serif;
+  --font-mono: 'VT323', ui-monospace, Menlo, monospace;
+  --font-body: 'Space Grotesk', system-ui, sans-serif;
+
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+}
+
+/* Station colour world: --hue is animated, every accent derives from it. */
+.theme {
+  transition: --hue 0.9s var(--ease-out);
+  --acc: oklch(0.74 0.19 var(--hue));
+  --acc2: oklch(0.88 0.13 calc(var(--hue) + 60));
+  --acc-deep: oklch(0.52 0.22 var(--hue));
+  --acc-glow: color-mix(in oklch, var(--acc) 70%, transparent);
+  --acc-line: color-mix(in oklch, var(--acc) 35%, transparent);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  scrollbar-width: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--acc, #fff);
+  outline-offset: 3px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
