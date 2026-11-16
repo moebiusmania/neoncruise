@@ -1,0 +1,5 @@
+# Per-user Xcode state and build output
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
