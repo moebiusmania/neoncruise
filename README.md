@@ -46,6 +46,10 @@ There's also a TUI version of the player in [`tui/`](tui/README.md), written in 
 cd tui && cargo run --release
 ```
 
+## iPhone app
+
+A native SwiftUI version for iPhone lives in [`ios/`](ios/README.md). It decodes the streams itself, so the spectrum, tape hiss and static burst work as on the web, and it keeps playing in the background with lock screen controls. Open `ios/NeonCruise.xcodeproj` in Xcode to run it.
+
 ## Keyboard shortcuts
 
 | Key             | Action           |

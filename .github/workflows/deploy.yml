@@ -6,6 +6,7 @@ on:
     # The terminal app lives in tui/ and isn't part of the site: skip pushes that only touch it.
     paths-ignore:
       - 'tui/**'
+      - 'ios/**'
   workflow_dispatch:
 
 permissions:
