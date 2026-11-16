@@ -18,3 +18,9 @@ serde_json = "1.0.154"
 symphonia = { version = "0.5", default-features = false, features = ["mp3"] }
 unicode-width = "0.2.3"
 ureq = { version = "3", features = ["json"] }
+
+# Smaller, faster release binaries (the per-frame canvas, FFT and post-processing are hot loops).
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

@@ -42,6 +42,10 @@ pub struct Post {
     rng: Rng,
     flicker: f32,
     flicker_frames: u32,
+    /// Vignette factor per cell, rebuilt only when the terminal size changes
+    /// (it was a `powf` per cell per frame).
+    vignette: Vec<f32>,
+    vignette_size: (u16, u16),
 }
 
 pub struct PostOpts {
@@ -65,6 +69,25 @@ impl Post {
             rng: Rng(0x1234_5678_9abc_def1),
             flicker: 1.0,
             flicker_frames: 0,
+            vignette: Vec::new(),
+            vignette_size: (0, 0),
+        }
+    }
+
+    fn vignette(&mut self, area: Rect) {
+        if self.vignette_size == (area.width, area.height) {
+            return;
+        }
+        self.vignette_size = (area.width, area.height);
+        let (w, h) = (area.width as f32, area.height as f32);
+        self.vignette.clear();
+        for y in 0..area.height {
+            let ny = (y as f32 + 0.5) / h * 2.0 - 1.0;
+            for x in 0..area.width {
+                let nx = (x as f32 + 0.5) / w * 2.0 - 1.0;
+                self.vignette
+                    .push(1.0 - 0.3 * ((nx * nx + ny * ny) / 2.0).powf(1.6));
+            }
         }
     }
 
@@ -84,13 +107,13 @@ impl Post {
         }
 
         let area = buf.area;
-        let (w, h) = (area.width as f32, area.height as f32);
+        self.vignette(area);
+        let w = area.width as usize;
         for y in area.top()..area.bottom() {
             let scan = if o.scan && y % 2 == 1 { 0.86 } else { 1.0 };
-            let ny = (y as f32 + 0.5) / h * 2.0 - 1.0;
+            let row = (y - area.top()) as usize * w;
             for x in area.left()..area.right() {
-                let nx = (x as f32 + 0.5) / w * 2.0 - 1.0;
-                let vig = 1.0 - 0.3 * ((nx * nx + ny * ny) / 2.0).powf(1.6);
+                let vig = self.vignette[row + (x - area.left()) as usize];
                 let mut k = scan * vig * self.flicker;
                 let mut add = 0.0;
                 if o.noise && self.rng.next() < 0.01 {
