@@ -1,6 +1,7 @@
 //! Now-playing metadata: the Nightride FM SSE feed plus the Icecast status JSON.
 
 use crate::stations::{META_URL, STATIONS, status_url};
+use crate::sync::LockExt;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
@@ -119,7 +120,7 @@ fn agent(per_read: Option<Duration>, body: Option<Duration>) -> ureq::Agent {
 }
 
 fn set_online(meta: &Meta, on: bool) {
-    let mut st = meta.lock().unwrap();
+    let mut st = meta.lock_ok();
     if st.online != on {
         st.online = on;
         st.version += 1;
@@ -130,7 +131,7 @@ fn apply_events(meta: &Meta, data: &str) {
     let Ok(items) = serde_json::from_str::<Vec<MetaEvent>>(data) else {
         return;
     };
-    let mut st = meta.lock().unwrap();
+    let mut st = meta.lock_ok();
     if !st.online {
         st.online = true;
         st.version += 1;
@@ -209,7 +210,7 @@ fn fetch_status(agent: &ureq::Agent, meta: &Meta, seed: bool) -> anyhow::Result<
         _ => &[],
     };
     let mut counts: HashMap<String, u32> = HashMap::new();
-    let mut st = meta.lock().unwrap();
+    let mut st = meta.lock_ok();
     st.version += 1;
     for src in sources {
         let url = src["listenurl"].as_str().unwrap_or("");
@@ -304,7 +305,7 @@ mod tests {
     fn feed(input: &str) -> (MetaState, anyhow::Result<()>) {
         let meta: Meta = Arc::default();
         let res = read_events(&mut input.as_bytes(), &meta);
-        let st = meta.lock().unwrap().clone();
+        let st = meta.lock_ok().clone();
         (st, res)
     }
 
