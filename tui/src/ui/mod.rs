@@ -867,8 +867,7 @@ impl Ui {
             *hgt += (v - *hgt) * vis.ease(if v > *hgt { 0.6 } else { 0.15 });
         }
         let rows = r.height as f32;
-        for i in 0..bars {
-            let hv = self.spec[i];
+        for (i, &hv) in self.spec.iter().enumerate().take(bars) {
             let units = (hv * rows * 8.0).round().max(1.0) as usize;
             let c = oklch(0.7 + hv * 0.2, 0.19, vis.hue)
                 .mix(BG, 0.55 - hv * 0.55)
