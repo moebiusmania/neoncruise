@@ -28,14 +28,14 @@ export const history = signal<Record<string, Track[]>>({});
 export const listeners = signal<Record<string, number>>({});
 export const metaOnline = signal(false);
 
-const same = (a: Track, b: Track) =>
+export const same = (a: Track, b: Track) =>
   (a.id && b.id && a.id === b.id) ||
   (a.title.toLowerCase() === b.title.toLowerCase() && a.artist.toLowerCase() === b.artist.toLowerCase());
 
 const text = (v: unknown) => (typeof v === 'string' ? v.slice(0, TEXT_MAX) : '');
 
 /** Validate one SSE item; the feed is third-party data, so never trust its shape. */
-function toTrack(it: unknown): [string, Track] | null {
+export function toTrack(it: unknown): [string, Track] | null {
   if (!it || typeof it !== 'object') return null;
   const m = it as Partial<Record<keyof MetaEvent, unknown>>;
   if (typeof m.station !== 'string' || !known.has(m.station)) return null;
@@ -64,7 +64,7 @@ function pushTrack(station: string, t: Track) {
   });
 }
 
-function splitTitle(s: string): Track {
+export function splitTitle(s: string): Track {
   const i = s.indexOf(' - ');
   return i > 0
     ? { artist: text(s.slice(0, i).trim()), title: text(s.slice(i + 3).trim()) }

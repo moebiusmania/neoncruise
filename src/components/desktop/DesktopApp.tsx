@@ -197,7 +197,7 @@ function SidePanel() {
           {log.length ? (
             <ol class={s.log}>
               {log.map((x, k) => (
-                <li key={`${x.artist}-${x.title}`} data-now={k === 0 || undefined}>
+                <li key={x.id ?? `${k}-${x.artist}-${x.title}`} data-now={k === 0 || undefined}>
                   <span class={s.logIdx}>{k === 0 ? 'NOW' : String(k).padStart(2, '0')}</span>
                   <span class={s.logText}>
                     <span>{x.title}</span>
