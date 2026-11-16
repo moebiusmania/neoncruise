@@ -357,6 +357,11 @@ final class Player {
             MainActor.assumeIsolated { self?.pause() }
             return .success
         }
+        // A live stream can't seek: keep the lock screen to play/pause and ◀◀ ▶▶ (stations).
+        for cmd in [c.skipForwardCommand, c.skipBackwardCommand, c.seekForwardCommand,
+                    c.seekBackwardCommand, c.changePlaybackPositionCommand, c.changePlaybackRateCommand] {
+            cmd.isEnabled = false
+        }
     }
 
     /// Keep the lock screen in sync with track changes, also while backgrounded (where
@@ -364,6 +369,7 @@ final class Player {
     private func observeTrack() {
         withObservationTracking {
             _ = meta.tracks[station.id]
+            _ = status
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.updateNowPlaying()
@@ -372,23 +378,29 @@ final class Player {
         }
     }
 
-    @ObservationIgnored private lazy var artwork: MPMediaItemArtwork? = {
-        guard let img = UIImage(named: "NowPlayingArtwork") else { return nil }
-        return MPMediaItemArtwork(boundsSize: img.size) { _ in img }
-    }()
-
     /// Lock screen / Control Center info for the current station and track.
     func updateNowPlaying() {
         let st = station
         let t = meta.tracks[st.id]
+        let title = t.map(\.title).flatMap { $0.isEmpty ? nil : $0 }
+        let artist = t.map(\.artist).flatMap { $0.isEmpty ? nil : $0 }
+        // The subtitle doubles as a status line while there's nothing to listen to.
+        let subtitle = switch status {
+        case .loading: "Tuning in…"
+        case .error: "No signal · retrying"
+        default: artist ?? st.tag
+        }
         var info: [String: Any] = [
-            MPMediaItemPropertyTitle: t.map(\.title).flatMap { $0.isEmpty ? nil : $0 } ?? "\(st.name) FM",
-            MPMediaItemPropertyArtist: t.map(\.artist).flatMap { $0.isEmpty ? nil : $0 } ?? st.tag,
-            MPMediaItemPropertyAlbumTitle: "\(st.name) · Nightride FM",
+            MPMediaItemPropertyTitle: title ?? "\(st.name) FM",
+            MPMediaItemPropertyArtist: subtitle,
+            MPMediaItemPropertyAlbumTitle: "\(Stations.tapeCode(stationIdx)) · \(st.name) · Nightride FM",
+            MPMediaItemPropertyMediaType: MPMediaType.music.rawValue,
+            MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue,
             MPNowPlayingInfoPropertyIsLiveStream: true,
             MPNowPlayingInfoPropertyPlaybackRate: status == .playing ? 1.0 : 0.0,
+            MPNowPlayingInfoPropertyDefaultPlaybackRate: 1.0,
         ]
-        if let artwork { info[MPMediaItemPropertyArtwork] = artwork }
+        if let art = NowPlayingArt.artwork(for: stationIdx) { info[MPMediaItemPropertyArtwork] = art }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
         MPNowPlayingInfoCenter.default().playbackState = wantPlay ? .playing : (status == .idle ? .stopped : .paused)
     }

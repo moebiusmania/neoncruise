@@ -10,6 +10,7 @@ struct RootView: View {
     @State private var fxOpen = false
     @State private var hover: Int?
     @State private var hue: Double = 350
+    @State private var splash = true
 
     var body: some View {
         GeometryReader { geo in
@@ -20,6 +21,12 @@ struct RootView: View {
                     PadView(fxOpen: $fxOpen, hover: $hover)
                 } else {
                     PhoneView(screen: $screen, sel: $sel)
+                }
+                if splash && !desktop {
+                    // Same horizon and sun size as the Now screen, so the dissolve lines up.
+                    let scale = min(1.25, min(geo.size.width, geo.size.height * 0.55) / 402)
+                    SplashView(station: player.station, index: player.stationIdx,
+                               horizon: 0.5, sun: 100 * scale) { splash = false }
                 }
                 CRTOverlays()
             }
@@ -42,6 +49,7 @@ struct RootView: View {
                 screen = args[i + 1] == "shelf" ? .shelf : args[i + 1] == "fx" ? .fx : .now
             }
             if args.contains("-fx") { fxOpen = true }
+            if args.contains("-nosplash") || args.contains("-screen") { splash = false }
             #endif
         }
     }
