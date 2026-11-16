@@ -45,7 +45,8 @@ export function Horizon({ hue, horizon, sun }: Props) {
     vis.hue = target.current.hue;
 
     const draw = (t: number) => {
-      const [ctx, W, H] = fitCanvas(cv);
+      // Full-viewport canvas: 1.5x is visually indistinguishable here and ~44% fewer pixels than 2x.
+      const [ctx, W, H] = fitCanvas(cv, 1.5);
       if (!W || !H) return;
       const tg = target.current;
       if (W * H !== starArea) {

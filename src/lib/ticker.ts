@@ -21,6 +21,8 @@ const subs = new Set<Sub>();
 let raf = 0;
 let bassAvg = 0.2;
 let last = 0;
+/** Frame budget while nothing is playing: the scene only drifts, so ~30 fps is plenty. */
+const IDLE_FRAME_MS = 1000 / 30 - 2;
 
 const reducedMotion =
   typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -50,6 +52,10 @@ function sample(t: number) {
 }
 
 function loop(ms: number) {
+  if (!wantPlay.peek() && last && ms - last * 1000 < IDLE_FRAME_MS) {
+    raf = subs.size ? requestAnimationFrame(loop) : 0;
+    return;
+  }
   const t = ms / 1000;
   vis.dt = Math.min(0.05, t - (last || t));
   vis.t = t;

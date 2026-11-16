@@ -35,7 +35,7 @@ const defaults: Settings = {
  * known keys with the right type. A bad `volume` (e.g. NaN) would otherwise make
  * `audio.volume = …` throw and break player init.
  */
-function sanitize(raw: unknown): Settings {
+export function sanitize(raw: unknown): Settings {
   const out = { ...defaults };
   if (!raw || typeof raw !== 'object') return out;
   const r = raw as Record<string, unknown>;
