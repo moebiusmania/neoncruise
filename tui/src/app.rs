@@ -2,9 +2,10 @@
 
 use crate::audio::{AudioEvent, Engine};
 use crate::color::approach_hue;
-use crate::meta::{Meta, Track};
+use crate::meta::{Meta, MetaState, Track};
 use crate::settings::Settings;
 use crate::stations::{STATIONS, Station, index_of, stream_url, wrap_index};
+use crate::sync::LockExt;
 use crate::vis::Vis;
 use ratatui::layout::Rect;
 use std::sync::mpsc::{Receiver, channel};
@@ -52,10 +53,15 @@ pub enum Action {
 
 pub const SLEEP_OPTS: [u32; 5] = [0, 15, 30, 60, 90];
 const FADE_SECS: f32 = 12.0;
+/// Coalesce settings writes: volume scrolls/drags change them every frame.
+const SAVE_DELAY: Duration = Duration::from_millis(500);
 
 pub struct App {
     pub settings: Settings,
     pub meta: Meta,
+    /// Copy of the shared metadata, refreshed only when its version changes, so drawing
+    /// doesn't lock the mutex (and clone the history) several times every frame.
+    snap: MetaState,
     pub engine: Engine,
     events: Receiver<AudioEvent>,
     pub vis: Vis,
@@ -80,7 +86,8 @@ pub struct App {
     /// Highlighted tape on the narrow-layout shelf.
     pub sel: usize,
     last_vol: f32,
-    dirty_settings: bool,
+    /// When unsaved settings changes should be written.
+    save_at: Option<Instant>,
     /// Write settings to disk (off for headless snapshots).
     pub persist: bool,
 
@@ -107,12 +114,26 @@ pub fn fmt(secs: f64) -> String {
     }
 }
 
-pub struct NowTrack {
-    pub title: String,
-    pub artist: String,
-    pub pos: String,
+/// The current track, borrowed from the metadata snapshot (no per-frame string clones).
+pub struct NowTrack<'a> {
+    pub title: &'a str,
+    pub artist: &'a str,
+    /// Seconds since the track started, when the feed says.
+    pub elapsed: Option<f64>,
+}
+
+impl NowTrack<'_> {
+    /// Elapsed time as `mm:ss`, formatted only where it's shown.
+    pub fn pos(&self) -> String {
+        self.elapsed.map(fmt).unwrap_or_else(|| "--:--".into())
+    }
+
     /// Tape wind progress for the reels: a loose estimate (live radio has no duration).
-    pub progress: f32,
+    pub fn progress(&self) -> f32 {
+        self.elapsed
+            .map(|e| (e / 300.0).min(1.0) as f32)
+            .unwrap_or(0.5)
+    }
 }
 
 impl App {
@@ -130,6 +151,7 @@ impl App {
             },
             settings,
             meta,
+            snap: MetaState::default(),
             engine,
             events: rx,
             vis: Vis::new(hue),
@@ -147,7 +169,7 @@ impl App {
             fx_open: false,
             screen: Screen::Now,
             sel: station_idx,
-            dirty_settings: false,
+            save_at: None,
             persist: true,
             desktop: true,
             hits: Vec::new(),
@@ -195,7 +217,7 @@ impl App {
         self.station_idx = i;
         self.sel = i;
         self.settings.station = STATIONS[i].id.into();
-        self.dirty_settings = true;
+        self.mark_dirty();
         self.burst_at = Some(Instant::now());
     }
 
@@ -256,7 +278,7 @@ impl App {
 
     pub fn set_volume(&mut self, v: f32) {
         self.settings.volume = (v.clamp(0.0, 1.0) * 100.0).round() / 100.0;
-        self.dirty_settings = true;
+        self.mark_dirty();
     }
 
     pub fn toggle_mute(&mut self) {
@@ -277,7 +299,19 @@ impl App {
             Toggle::Hiss => &mut s.hiss,
         };
         *v = !*v;
-        self.dirty_settings = true;
+        self.mark_dirty();
+    }
+
+    fn mark_dirty(&mut self) {
+        self.save_at
+            .get_or_insert_with(|| Instant::now() + SAVE_DELAY);
+    }
+
+    /// Write pending settings now (called on exit).
+    pub fn flush_settings(&mut self) {
+        if self.save_at.take().is_some() && self.persist {
+            self.settings.save();
+        }
     }
 
     pub fn toggle_fx(&mut self) {
@@ -350,10 +384,14 @@ impl App {
         let k = self.vis.ease(0.07);
         self.vis.hue = approach_hue(self.vis.hue, target, k);
 
-        if self.dirty_settings {
-            self.dirty_settings = false;
-            if self.persist {
-                self.settings.save();
+        if self.save_at.is_some_and(|at| Instant::now() >= at) {
+            self.flush_settings();
+        }
+
+        {
+            let meta = self.meta.lock_ok();
+            if meta.version != self.snap.version {
+                self.snap = meta.clone();
             }
         }
     }
@@ -368,42 +406,44 @@ impl App {
 
     /* -------------------------------------------------------------- data */
 
-    pub fn now_track(&self, id: &str) -> NowTrack {
-        let meta = self.meta.lock().unwrap();
-        let t = meta.tracks.get(id);
-        let elapsed = t
-            .and_then(|t| t.at)
-            .map(|at| epoch_ms().saturating_sub(at) as f64 / 1000.0);
+    pub fn now_track(&self, id: &str) -> NowTrack<'_> {
+        let t = self.snap.tracks.get(id);
         NowTrack {
             title: t
-                .map(|t| t.title.clone())
+                .map(|t| t.title.as_str())
                 .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| "Tuning in…".into()),
+                .unwrap_or("Tuning in…"),
             artist: t
-                .map(|t| t.artist.clone())
+                .map(|t| t.artist.as_str())
                 .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| "Waiting for the signal".into()),
-            pos: elapsed.map(fmt).unwrap_or_else(|| "--:--".into()),
-            progress: elapsed.map(|e| (e / 300.0).min(1.0) as f32).unwrap_or(0.5),
+                .unwrap_or("Waiting for the signal"),
+            elapsed: t
+                .and_then(|t| t.at)
+                .map(|at| epoch_ms().saturating_sub(at) as f64 / 1000.0),
         }
     }
 
-    pub fn track(&self, id: &str) -> Option<Track> {
-        self.meta.lock().unwrap().tracks.get(id).cloned()
+    pub fn track(&self, id: &str) -> Option<&Track> {
+        self.snap.tracks.get(id)
     }
 
     pub fn listeners(&self, id: &str) -> Option<u32> {
-        self.meta.lock().unwrap().listeners.get(id).copied()
+        self.snap.listeners.get(id).copied()
     }
 
-    pub fn history(&self, id: &str) -> Vec<Track> {
-        self.meta
-            .lock()
-            .unwrap()
-            .history
-            .get(id)
-            .cloned()
-            .unwrap_or_default()
+    pub fn history(&self, id: &str) -> &[Track] {
+        self.snap.history.get(id).map_or(&[], Vec::as_slice)
+    }
+
+    pub fn meta_online(&self) -> bool {
+        self.snap.online
+    }
+
+    pub fn total_listeners(&self) -> u32 {
+        self.snap
+            .listeners
+            .values()
+            .fold(0u32, |a, &b| a.saturating_add(b))
     }
 
     pub fn status_label(&self) -> String {

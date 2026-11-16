@@ -28,6 +28,12 @@ cd tui
 cargo run --release
 ```
 
+It draws at 30 fps (10 fps while the terminal is unfocused). On a Raspberry Pi or over SSH, a lower rate saves CPU and bandwidth:
+
+```sh
+cargo run --release -- --fps 15
+```
+
 ## Keys
 
 | Key                 | Action                         |

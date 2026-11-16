@@ -6,28 +6,40 @@ mod color;
 mod meta;
 mod settings;
 mod stations;
+mod sync;
 mod ui;
 mod vis;
 
 use app::{Action, App, Screen};
 use crossterm::event::{
-    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
-    MouseButton, MouseEvent, MouseEventKind,
+    self, DisableFocusChange, DisableMouseCapture, EnableFocusChange, EnableMouseCapture, Event,
+    KeyCode, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
 use crossterm::execute;
 use std::io::stdout;
 use std::time::{Duration, Instant};
 
+/// Default frame rate; `--fps N` overrides it (lower = less CPU and terminal I/O).
 const FPS: u64 = 30;
+/// Frame rate while the terminal window is unfocused (if the terminal reports focus).
+/// Every frame repaints most of the screen in truecolor, which is real CPU and I/O.
+const FPS_UNFOCUSED: u64 = 10;
 
 fn main() -> anyhow::Result<()> {
     if std::env::args().any(|a| a == "-h" || a == "--help") {
         println!(
-            "neoncruise-tui {}\n\nA retro outrun cassette player for Nightride FM.\n\nRun it in a truecolor terminal; press ? inside for keys.",
+            "neoncruise-tui {}\n\nA retro outrun cassette player for Nightride FM.\n\nOptions:\n  --fps <N>   Frame rate, 1-60 (default {FPS}); try 15 on a Raspberry Pi or over SSH\n  -h, --help  Show this help\n\nRun it in a truecolor terminal; press ? inside for keys.",
             env!("CARGO_PKG_VERSION")
         );
         return Ok(());
     }
+    let fps = match parse_fps(std::env::args()) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("neoncruise-tui: {e}");
+            std::process::exit(2);
+        }
+    };
     #[cfg(debug_assertions)]
     if let Some(i) = std::env::args().position(|a| a == "--snapshot") {
         return snapshot(&std::env::args().skip(i + 1).collect::<Vec<_>>());
@@ -35,19 +47,47 @@ fn main() -> anyhow::Result<()> {
     let meta = meta::start();
     let mut app = App::new(meta);
     let mut terminal = ratatui::init();
-    execute!(stdout(), EnableMouseCapture)?;
-    let res = run(&mut terminal, &mut app);
-    let _ = execute!(stdout(), DisableMouseCapture);
+    // ratatui's panic hook restores raw mode and the alternate screen, but not the mouse and
+    // focus reporting we turn on, which would leave the shell spewing escape codes on a panic.
+    let hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = execute!(stdout(), DisableMouseCapture, DisableFocusChange);
+        hook(info);
+    }));
+    execute!(stdout(), EnableMouseCapture, EnableFocusChange)?;
+    let res = run(&mut terminal, &mut app, fps);
+    let _ = execute!(stdout(), DisableMouseCapture, DisableFocusChange);
     ratatui::restore();
     app.engine.stop();
+    app.flush_settings();
     res
 }
 
-fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> anyhow::Result<()> {
+/// Read `--fps N` / `--fps=N` (1..=60), defaulting to [`FPS`].
+fn parse_fps(mut args: impl Iterator<Item = String>) -> anyhow::Result<u64> {
+    while let Some(a) = args.next() {
+        let v = if a == "--fps" {
+            args.next()
+        } else if let Some(v) = a.strip_prefix("--fps=") {
+            Some(v.to_string())
+        } else {
+            continue;
+        };
+        return match v.as_deref().map(str::parse::<u64>) {
+            Some(Ok(n @ 1..=60)) => Ok(n),
+            _ => anyhow::bail!("--fps expects a number from 1 to 60"),
+        };
+    }
+    Ok(FPS)
+}
+
+fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App, fps: u64) -> anyhow::Result<()> {
     let mut ui = ui::Ui::new();
-    let frame = Duration::from_millis(1000 / FPS);
+    let mut focused = true;
     let mut last = Instant::now();
     while !app.quit {
+        let frame =
+            Duration::from_millis(1000 / if focused { fps } else { fps.min(FPS_UNFOCUSED) });
         let now = Instant::now();
         let dt = (now - last).as_secs_f32();
         last = now;
@@ -65,6 +105,8 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> anyhow::Result
                     on_key(app, k.code, k.modifiers)
                 }
                 Event::Mouse(m) => on_mouse(app, m),
+                Event::FocusGained => focused = true,
+                Event::FocusLost => focused = false,
                 _ => {}
             }
             if app.quit {
@@ -240,4 +282,24 @@ fn snapshot(args: &[String]) -> anyhow::Result<()> {
         app.status, app.vis.live, app.vis.beat, app.engine.available
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fps(args: &[&str]) -> anyhow::Result<u64> {
+        parse_fps(args.iter().map(|s| s.to_string()))
+    }
+
+    #[test]
+    fn parses_fps_flag() {
+        assert_eq!(fps(&["bin"]).unwrap(), FPS);
+        assert_eq!(fps(&["bin", "--fps", "15"]).unwrap(), 15);
+        assert_eq!(fps(&["bin", "--fps=60"]).unwrap(), 60);
+        assert!(fps(&["bin", "--fps", "0"]).is_err());
+        assert!(fps(&["bin", "--fps", "120"]).is_err());
+        assert!(fps(&["bin", "--fps"]).is_err());
+        assert!(fps(&["bin", "--fps", "fast"]).is_err());
+    }
 }
