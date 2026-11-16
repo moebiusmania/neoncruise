@@ -25,6 +25,10 @@ const PRIME: usize = RATE as usize; // 0.5 s
 /// Back-pressure ceiling for the decoder.
 const MAX_BUF: usize = RATE as usize * 2 * 4; // 4 s
 pub const ANALYSIS_LEN: usize = 512;
+/// A live stream that sends nothing for this long is dead. Without a per-read timeout a
+/// stalled connection blocks its decoder thread forever: the app's watchdog starts a new
+/// stream, but the old thread and socket leak on every stall.
+const READ_TIMEOUT: Duration = Duration::from_secs(15);
 
 struct AtomicF32(AtomicU32);
 impl AtomicF32 {
@@ -166,6 +170,7 @@ fn stream(shared: &Shared, generation: u64, url: &str) -> anyhow::Result<()> {
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_connect(Some(Duration::from_secs(10)))
         .timeout_recv_response(Some(Duration::from_secs(10)))
+        .timeout_per_read(Some(READ_TIMEOUT))
         .build()
         .into();
     let resp = agent
@@ -296,6 +301,8 @@ struct Output {
     burst_env: f32,
     burst_lp: f32,
     burst_bp: f32,
+    /// Per-sample decay of the static burst (constant; computed once).
+    burst_decay: f32,
     tap: Vec<f32>,
 }
 
@@ -315,6 +322,7 @@ impl Output {
             burst_env: 0.0,
             burst_lp: 0.0,
             burst_bp: 0.0,
+            burst_decay: ((0.0001f32).ln() / (0.45 * RATE as f32)).exp(),
             tap: Vec::with_capacity(CHUNK / 2),
         }
     }
@@ -326,8 +334,10 @@ impl Output {
         (self.rng as f32 / u32::MAX as f32) * 2.0 - 1.0
     }
 
+    // Runs on the real-time audio callback thread: no allocation, and never wait on a lock
+    // the UI thread may hold.
     fn refill(&mut self) {
-        let sh = self.shared.clone();
+        let sh = Arc::clone(&self.shared);
         let target = sh.volume.get();
         let hiss_on = sh.hiss.load(Relaxed);
         if sh.burst.swap(false, Relaxed) {
@@ -360,8 +370,7 @@ impl Output {
         } else {
             0.0
         };
-        let burst_decay = (0.0001f32).ln() / (0.45 * RATE as f32);
-        let burst_decay = burst_decay.exp();
+        let burst_decay = self.burst_decay;
         for f in 0..CHUNK / 2 {
             self.gain += (target - self.gain) * 0.002;
             self.hiss_gain += (hiss_target - self.hiss_gain) * 0.0005;
@@ -389,11 +398,14 @@ impl Output {
             self.chunk[f * 2 + 1] = r * self.gain + hiss + burst;
         }
 
-        let mut a = sh.analysis.lock().unwrap();
-        let n = self.tap.len().min(ANALYSIS_LEN);
-        a.rotate_left(n);
-        let len = a.len();
-        a[len - n..].copy_from_slice(&self.tap[self.tap.len() - n..]);
+        // The spectrum is cosmetic: if the UI is mid-copy, skip this chunk rather than block
+        // the audio thread (a missed deadline here is an audible glitch).
+        if let Ok(mut a) = sh.analysis.try_lock() {
+            let n = self.tap.len().min(ANALYSIS_LEN);
+            a.rotate_left(n);
+            let len = a.len();
+            a[len - n..].copy_from_slice(&self.tap[self.tap.len() - n..]);
+        }
         self.pos = 0;
     }
 }

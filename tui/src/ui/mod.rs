@@ -628,7 +628,7 @@ impl Ui {
                 .track(st.id)
                 .map(|t| {
                     if t.artist.is_empty() {
-                        t.title
+                        t.title.clone()
                     } else {
                         format!("{} — {}", t.artist, t.title)
                     }
@@ -1171,10 +1171,7 @@ impl Ui {
         } else {
             format!("STREAM {:?}", st).to_uppercase()
         };
-        let (online, total) = {
-            let m = app.meta.lock().unwrap();
-            (m.online, m.listeners.values().sum::<u32>())
-        };
+        let (online, total) = { (app.meta_online(), app.total_listeners()) };
         let item = |buf: &mut Buffer, x: &mut u16, d: Option<Color>, s: &str, c: Color| {
             if let Some(d) = d {
                 put(buf, *x, y, "●", 1, fg(d));
