@@ -1,0 +1,243 @@
+//! Neon Cruise TUI: a retro outrun cassette player for Nightride FM, in the terminal.
+
+mod app;
+mod audio;
+mod color;
+mod meta;
+mod settings;
+mod stations;
+mod ui;
+mod vis;
+
+use app::{Action, App, Screen};
+use crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
+    MouseButton, MouseEvent, MouseEventKind,
+};
+use crossterm::execute;
+use std::io::stdout;
+use std::time::{Duration, Instant};
+
+const FPS: u64 = 30;
+
+fn main() -> anyhow::Result<()> {
+    if std::env::args().any(|a| a == "-h" || a == "--help") {
+        println!(
+            "neoncruise-tui {}\n\nA retro outrun cassette player for Nightride FM.\n\nRun it in a truecolor terminal; press ? inside for keys.",
+            env!("CARGO_PKG_VERSION")
+        );
+        return Ok(());
+    }
+    #[cfg(debug_assertions)]
+    if let Some(i) = std::env::args().position(|a| a == "--snapshot") {
+        return snapshot(&std::env::args().skip(i + 1).collect::<Vec<_>>());
+    }
+    let meta = meta::start();
+    let mut app = App::new(meta);
+    let mut terminal = ratatui::init();
+    execute!(stdout(), EnableMouseCapture)?;
+    let res = run(&mut terminal, &mut app);
+    let _ = execute!(stdout(), DisableMouseCapture);
+    ratatui::restore();
+    app.engine.stop();
+    res
+}
+
+fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> anyhow::Result<()> {
+    let mut ui = ui::Ui::new();
+    let frame = Duration::from_millis(1000 / FPS);
+    let mut last = Instant::now();
+    while !app.quit {
+        let now = Instant::now();
+        let dt = (now - last).as_secs_f32();
+        last = now;
+        app.tick(dt);
+        terminal.draw(|f| ui.draw(f, app))?;
+
+        let deadline = now + frame;
+        loop {
+            let left = deadline.saturating_duration_since(Instant::now());
+            if !event::poll(left)? {
+                break;
+            }
+            match event::read()? {
+                Event::Key(k) if k.kind != KeyEventKind::Release => {
+                    on_key(app, k.code, k.modifiers)
+                }
+                Event::Mouse(m) => on_mouse(app, m),
+                _ => {}
+            }
+            if app.quit {
+                break;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn on_key(app: &mut App, code: KeyCode, mods: KeyModifiers) {
+    let shelf = !app.desktop && app.screen == Screen::Shelf;
+    match code {
+        KeyCode::Char('c') if mods.contains(KeyModifiers::CONTROL) => app.quit = true,
+        KeyCode::Char('q') => app.quit = true,
+        KeyCode::Char(' ') | KeyCode::Char('k') => app.toggle_play(),
+        KeyCode::Enter if shelf => {
+            app.insert(app.sel);
+            app.screen = Screen::Now;
+        }
+        KeyCode::Enter => app.toggle_play(),
+        KeyCode::Up if shelf => app.sel = stations::wrap_index(app.sel as isize - 1),
+        KeyCode::Down if shelf => app.sel = stations::wrap_index(app.sel as isize + 1),
+        KeyCode::Right | KeyCode::Down | KeyCode::Char('n') => app.tune_by(1),
+        KeyCode::Left | KeyCode::Up | KeyCode::Char('p') => app.tune_by(-1),
+        KeyCode::Char(c @ '1'..='9') => {
+            let i = c as usize - '1' as usize;
+            if i < stations::STATIONS.len() {
+                app.tune(i as isize);
+            }
+        }
+        KeyCode::Char('m') => app.toggle_mute(),
+        KeyCode::Char('+') | KeyCode::Char('=') => app.set_volume(app.settings.volume + 0.05),
+        KeyCode::Char('-') | KeyCode::Char('_') => app.set_volume(app.settings.volume - 0.05),
+        KeyCode::Char('f') => app.toggle_fx(),
+        KeyCode::Char('s') => app.cycle_sleep(),
+        KeyCode::Char('r') => app.toggle(app::Toggle::Reactive),
+        KeyCode::Char('h') => app.toggle(app::Toggle::Hiss),
+        KeyCode::Tab => {
+            app.screen = match app.screen {
+                Screen::Now => Screen::Shelf,
+                Screen::Shelf => Screen::Fx,
+                Screen::Fx => Screen::Now,
+            };
+            app.sel = app.station_idx;
+        }
+        KeyCode::Esc => {
+            app.fx_open = false;
+            app.screen = Screen::Now;
+        }
+        _ => {}
+    }
+}
+
+fn on_mouse(app: &mut App, m: MouseEvent) {
+    let hit = app
+        .hits
+        .iter()
+        .rev()
+        .find(|(r, _)| {
+            m.column >= r.x && m.column < r.right() && m.row >= r.y && m.row < r.bottom()
+        })
+        .copied();
+    match m.kind {
+        MouseEventKind::Moved => {
+            app.hover = match hit {
+                Some((_, Action::Select(i))) if app.desktop => Some(i),
+                _ => None,
+            };
+        }
+        MouseEventKind::ScrollUp => app.set_volume(app.settings.volume + 0.05),
+        MouseEventKind::ScrollDown => app.set_volume(app.settings.volume - 0.05),
+        MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(MouseButton::Left) => {
+            let Some((r, act)) = hit else { return };
+            let drag = matches!(m.kind, MouseEventKind::Drag(_));
+            if drag && !matches!(act, Action::Volume) {
+                return;
+            }
+            match act {
+                Action::Select(i) => {
+                    if app.desktop || app.sel == i {
+                        app.insert(i);
+                        if !app.desktop {
+                            app.screen = Screen::Now;
+                        }
+                    } else {
+                        app.sel = i;
+                    }
+                }
+                Action::TogglePlay => app.toggle_play(),
+                Action::Prev => app.tune_by(-1),
+                Action::Next => app.tune_by(1),
+                Action::Toggle(t) => app.toggle(t),
+                Action::Sleep(min) => app.set_sleep(min),
+                Action::Volume => {
+                    let v = (m.column - r.x) as f32 / (r.width.max(2) - 1) as f32;
+                    app.set_volume(v);
+                }
+                Action::Mute => app.toggle_mute(),
+                Action::Screen(s) => {
+                    app.screen = s;
+                    app.sel = app.station_idx;
+                }
+                Action::Fx => app.toggle_fx(),
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Debug helper: render a few seconds headlessly and dump the last frame as ANSI.
+/// `--snapshot 170x48 <seconds> <out> [keys]` (playback is muted).
+#[cfg(debug_assertions)]
+fn snapshot(args: &[String]) -> anyhow::Result<()> {
+    use ratatui::backend::TestBackend;
+    use ratatui::style::Color;
+    use std::fmt::Write;
+    let (w, h) = args[0]
+        .split_once('x')
+        .ok_or_else(|| anyhow::anyhow!("size"))?;
+    let secs: f32 = args[1].parse()?;
+    let mut app = App::new(meta::start());
+    app.persist = false;
+    app.settings.volume = 0.0;
+    let mut term = ratatui::Terminal::new(TestBackend::new(w.parse()?, h.parse()?))?;
+    let mut ui = ui::Ui::new();
+    let keys = args.get(3).cloned().unwrap_or_default();
+    let start = Instant::now();
+    let mut last = start;
+    let mut sent = 0;
+    while start.elapsed().as_secs_f32() < secs {
+        let el = start.elapsed().as_secs_f32();
+        // One key every 0.5 s.
+        if sent < keys.len() && el > 0.5 * (sent + 1) as f32 {
+            let c = keys.as_bytes()[sent] as char;
+            let code = match c {
+                '>' => KeyCode::Right,
+                '<' => KeyCode::Left,
+                '\t' => KeyCode::Tab,
+                _ => KeyCode::Char(c),
+            };
+            on_key(&mut app, code, KeyModifiers::NONE);
+            sent += 1;
+        }
+        let now = Instant::now();
+        app.tick((now - last).as_secs_f32());
+        last = now;
+        term.draw(|f| ui.draw(f, &mut app))?;
+        std::thread::sleep(Duration::from_millis(1000 / FPS));
+    }
+    let buf = term.backend().buffer().clone();
+    let mut out = String::new();
+    let rgb = |c: Color| match c {
+        Color::Rgb(r, g, b) => (r, g, b),
+        _ => (5, 2, 10),
+    };
+    for y in 0..buf.area.height {
+        for x in 0..buf.area.width {
+            let c = &buf[(x, y)];
+            let (fr, fg, fb) = rgb(c.fg);
+            let (br, bg, bb) = rgb(c.bg);
+            let _ = write!(
+                out,
+                "\x1b[38;2;{fr};{fg};{fb};48;2;{br};{bg};{bb}m{}",
+                c.symbol()
+            );
+        }
+        out.push_str("\x1b[0m\n");
+    }
+    std::fs::write(&args[2], out)?;
+    eprintln!(
+        "status={:?} live={} beat={:.2} audio={}",
+        app.status, app.vis.live, app.vis.beat, app.engine.available
+    );
+    Ok(())
+}

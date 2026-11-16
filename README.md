@@ -36,6 +36,14 @@ Then open http://localhost:4321/neoncruise/.
 
 The offline service worker only registers in production builds, so use `bun run build && bun run preview` to test installing the app.
 
+## Terminal version
+
+There's also a TUI version of the player in [`tui/`](tui/README.md), written in Rust with ratatui. It streams and decodes the audio itself and mirrors this layout in the terminal, animations included:
+
+```sh
+cd tui && cargo run --release
+```
+
 ## Keyboard shortcuts
 
 | Key             | Action           |

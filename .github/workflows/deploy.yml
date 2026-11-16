@@ -3,6 +3,9 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+    # The terminal app lives in tui/ and isn't part of the site: skip pushes that only touch it.
+    paths-ignore:
+      - 'tui/**'
   workflow_dispatch:
 
 permissions:
