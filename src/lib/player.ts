@@ -28,7 +28,8 @@ let ctx: AudioContext | null = null;
 let analyser: AnalyserNode | null = null;
 let hissGain: GainNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
-let graphed = new WeakSet<HTMLAudioElement>();
+/** Source node of the current <audio>, kept so it can be disconnected when that element is replaced. */
+let mediaSrc: { el: HTMLAudioElement; node: MediaElementAudioSourceNode } | null = null;
 let retries = 0;
 let retryTimer = 0;
 let fade = 1;
@@ -102,9 +103,10 @@ function ensureGraph(a: HTMLAudioElement) {
       analyser.smoothingTimeConstant = 0.78;
       analyser.connect(ctx.destination);
     }
-    if (!graphed.has(a)) {
-      ctx.createMediaElementSource(a).connect(analyser!);
-      graphed.add(a);
+    if (mediaSrc?.el !== a) {
+      const node = ctx.createMediaElementSource(a);
+      node.connect(analyser!);
+      mediaSrc = { el: a, node };
     }
     if (ctx.state === 'suspended') ctx.resume();
   } catch (err) {
@@ -242,13 +244,16 @@ const FADE_SECS = 12;
 
 function tick() {
   const t = Date.now();
-  now.value = t;
+  // `now` only drives on-screen clocks. Skipping it while hidden stops a whole re-render
+  // every second in a background tab (the common case for a radio player).
+  if (document.visibilityState === 'visible') now.value = t;
   const end = sleepEnd.peek();
   if (!end) return;
   const left = (end - t) / 1000;
   if (left <= 0) {
-    setSleep(0);
+    // Pause first: resetting the timer restores full volume, which would blip out for a frame.
     pause();
+    setSleep(0);
   } else if (left < FADE_SECS && wantPlay.peek()) {
     fade = left / FADE_SECS;
     applyVolume();
@@ -284,8 +289,10 @@ function initEffects() {
     audio.pause();
     audio.removeAttribute('src');
     audio.load();
+    // Detach the old element from the graph, otherwise the source node keeps it alive.
+    mediaSrc?.node.disconnect();
+    mediaSrc = null;
     audio = createAudio();
-    graphed = new WeakSet();
     if (was) play();
   });
 
@@ -299,13 +306,15 @@ function initEffects() {
     const ms = navigator.mediaSession;
     const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
     const icon = (s: number) => ({ src: `${base}icons/icon-${s}.png`, sizes: `${s}x${s}`, type: 'image/png' });
+    // Only the active station's title/artist (as strings, so unchanged values don't notify):
+    // reading `tracks` directly would rebuild the lock-screen metadata on every station's update.
+    const msTitle = computed(() => tracks.value[station.value.id]?.title || `${station.value.name} FM`);
+    const msArtist = computed(() => tracks.value[station.value.id]?.artist || station.value.tag);
     effect(() => {
-      const st = station.value;
-      const t = tracks.value[st.id];
       ms.metadata = new MediaMetadata({
-        title: t?.title || `${st.name} FM`,
-        artist: t?.artist || st.tag,
-        album: `${st.name} · Nightride FM`,
+        title: msTitle.value,
+        artist: msArtist.value,
+        album: `${station.value.name} · Nightride FM`,
         artwork: [icon(192), icon(512)],
       });
     });
@@ -327,7 +336,9 @@ function initEffects() {
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && ctx?.state === 'suspended' && wantPlay.peek()) ctx.resume();
+    if (document.visibilityState !== 'visible') return;
+    now.value = Date.now();
+    if (ctx?.state === 'suspended' && wantPlay.peek()) ctx.resume();
   });
 
   setInterval(tick, 1000);

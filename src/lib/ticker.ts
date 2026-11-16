@@ -79,10 +79,46 @@ export function approachHue(from: number, to: number, k: number) {
   return (from + d * k + 360) % 360;
 }
 
+type Box = { w: number; h: number; ctx: CanvasRenderingContext2D };
+const boxes = new WeakMap<HTMLCanvasElement, Box>();
+let ro: ResizeObserver | null = null;
+
+/**
+ * Cached CSS size + 2D context per canvas. Reading clientWidth/clientHeight every frame forces a
+ * synchronous style/layout flush whenever the DOM changed since the last frame; a ResizeObserver
+ * tells us when the box actually changes instead.
+ */
+function box(cv: HTMLCanvasElement): Box {
+  let b = boxes.get(cv);
+  if (b) return b;
+  b = { w: cv.clientWidth, h: cv.clientHeight, ctx: cv.getContext('2d')! };
+  boxes.set(cv, b);
+  if (typeof ResizeObserver !== 'undefined') {
+    ro ??= new ResizeObserver((entries) => {
+      for (const e of entries) {
+        const bb = boxes.get(e.target as HTMLCanvasElement);
+        if (!bb) continue;
+        const s = e.contentBoxSize?.[0];
+        bb.w = s ? s.inlineSize : e.contentRect.width;
+        bb.h = s ? s.blockSize : e.contentRect.height;
+      }
+    });
+    ro.observe(cv);
+  }
+  return b;
+}
+
+/** Stop tracking a canvas (call on unmount). */
+export function releaseCanvas(cv: HTMLCanvasElement) {
+  ro?.unobserve(cv);
+  boxes.delete(cv);
+}
+
 /** Fit a canvas backing store to its CSS box. Returns [ctx, width, height] in CSS px. */
 export function fitCanvas(cv: HTMLCanvasElement, maxDpr = 2) {
-  const W = cv.clientWidth;
-  const H = cv.clientHeight;
+  const b = box(cv);
+  const W = b.w;
+  const H = b.h;
   const dpr = Math.min(maxDpr, window.devicePixelRatio || 1);
   const bw = Math.round(W * dpr);
   const bh = Math.round(H * dpr);
@@ -90,7 +126,7 @@ export function fitCanvas(cv: HTMLCanvasElement, maxDpr = 2) {
     cv.width = bw;
     cv.height = bh;
   }
-  const ctx = cv.getContext('2d')!;
+  const ctx = b.ctx;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   return [ctx, W, H] as const;
 }

@@ -14,9 +14,10 @@
   --line-soft: rgb(255 255 255 / 0.08);
   --glass: rgb(5 2 10 / 0.74);
 
-  --font-display: 'Syncopate', 'Arial Black', sans-serif;
-  --font-mono: 'VT323', ui-monospace, Menlo, monospace;
-  --font-body: 'Space Grotesk', system-ui, sans-serif;
+  /* Self-hosted through Astro's Fonts API (see astro.config.mjs); the variables carry their fallbacks. */
+  --font-display: var(--font-syncopate);
+  --font-mono: var(--font-vt323);
+  --font-body: var(--font-space-grotesk);
 
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
 

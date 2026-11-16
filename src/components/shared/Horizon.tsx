@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'preact/hooks';
 import { wantPlay } from '../../lib/player';
-import { approachHue, fitCanvas, motionScale, subscribe, vis } from '../../lib/ticker';
+import { approachHue, fitCanvas, motionScale, releaseCanvas, subscribe, vis } from '../../lib/ticker';
 import s from './Horizon.module.css';
 
 interface Props {
@@ -84,12 +84,15 @@ export function Horizon({ hue, horizon, sun }: Props) {
       ctx.fillStyle = rg;
       ctx.fillRect(0, 0, W, Y);
 
+      // One fillStyle for all stars and per-star globalAlpha: up to 420 colour strings a frame
+      // were being built and parsed before.
+      ctx.fillStyle = '#fff0ff';
       for (const st of stars) {
         const y = st.y * Y * 0.85;
-        const a = (0.25 + 0.75 * Math.abs(Math.sin(t * st.sp + st.p))) * (1 - y / Y);
-        ctx.fillStyle = `rgba(255,240,255,${a.toFixed(3)})`;
+        ctx.globalAlpha = (0.25 + 0.75 * Math.abs(Math.sin(t * st.sp + st.p))) * (1 - y / Y);
         ctx.fillRect(st.x * W, y, st.r, st.r);
       }
+      ctx.globalAlpha = 1;
 
       // sun with scrolling cut-out stripes
       const S = Math.ceil(R * 2 + 8);
@@ -154,31 +157,34 @@ export function Horizon({ hue, horizon, sun }: Props) {
       ctx.rect(0, Y, W, H - Y);
       ctx.clip();
       const ph = phase % 1;
+      ctx.strokeStyle = C(0.76, 0.22, h);
       for (let k = 0; k < 44; k++) {
         const y = Y + ((H - Y) * 1.2) / (k + 1 - ph);
         if (y > H + 2) continue;
         if (y - Y < 0.6) break;
         const a = Math.min(1, ((y - Y) / (H - Y)) * 2.2);
-        ctx.strokeStyle = C(0.76, 0.22, h, (a * (0.7 + 0.3 * beat)).toFixed(3));
+        ctx.globalAlpha = a * (0.7 + 0.3 * beat);
         ctx.lineWidth = 0.6 + a * 1.1 + beat * a * 0.9;
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(W, y);
         ctx.stroke();
       }
+      ctx.globalAlpha = 1;
       const lg = ctx.createLinearGradient(0, Y, 0, H);
       lg.addColorStop(0, C(0.76, 0.22, h, 0));
       lg.addColorStop(0.35, C(0.76, 0.22, h, 0.5));
       lg.addColorStop(1, C(0.76, 0.22, h, 0.95));
       ctx.strokeStyle = lg;
       ctx.lineWidth = 1.2;
+      // All verticals share one style, so stroke them as a single path.
       const N = Math.ceil(W / 2 / 62) + 4;
+      ctx.beginPath();
       for (let j = -N; j <= N; j++) {
-        ctx.beginPath();
         ctx.moveTo(W / 2 + j * 1.5, Y);
         ctx.lineTo(W / 2 + j * 62, H);
-        ctx.stroke();
       }
+      ctx.stroke();
       ctx.restore();
 
       ctx.save();
@@ -189,7 +195,11 @@ export function Horizon({ hue, horizon, sun }: Props) {
       ctx.restore();
     };
 
-    return subscribe(draw);
+    const unsub = subscribe(draw);
+    return () => {
+      unsub();
+      releaseCanvas(cv);
+    };
   }, []);
 
   return <canvas ref={ref} class={s.canvas} aria-hidden="true" />;

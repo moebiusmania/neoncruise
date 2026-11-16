@@ -1,4 +1,5 @@
 ---
+import { Font } from 'astro:assets';
 import App from '../components/App';
 import '../styles/global.css';
 
@@ -55,12 +56,11 @@ const ogImage = new URL(`${base}og.png`, Astro.site).href;
       });
     </script>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=VT323&family=Space+Grotesk:wght@400;500;600&display=swap"
-    />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+
+    <Font cssVariable="--font-syncopate" preload />
+    <Font cssVariable="--font-vt323" preload />
+    <Font cssVariable="--font-space-grotesk" />
     <link rel="preconnect" href="https://stream.nightride.fm" crossorigin />
     <link rel="preconnect" href="https://nightride.fm" crossorigin />
   </head>

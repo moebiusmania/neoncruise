@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
-import { initPlayer, burstAt, togglePlay, tune, tuneBy, setVolume } from '../lib/player';
+import { initPlayer, togglePlay, tune, tuneBy, setVolume } from '../lib/player';
 import { startMeta } from '../lib/meta';
 import { initPwa } from '../lib/pwa';
 import { settings } from '../lib/settings';
@@ -22,24 +22,17 @@ export default function App() {
     return p === 'shelf' || p === 'fx' ? p : 'now';
   });
   const [fxOpen, setFxOpen] = useState(false);
-  const [burst, setBurst] = useState(false);
-  const st = settings.value;
-
-  // Static burst on every tape change.
-  useEffect(() => {
-    if (!burstAt.value) return;
-    setBurst(true);
-    const t = setTimeout(() => setBurst(false), 320);
-    return () => clearTimeout(t);
-  }, [burstAt.value]);
 
   useEffect(() => {
     let lastVol = settings.peek().volume || 0.85;
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const el = e.target as HTMLElement;
+      // Holding a key would toggle play or restart the stream over and over.
+      if (e.repeat) return;
+      const el = e.target instanceof Element ? e.target : document.body;
       if (el.closest('input, textarea, select, [contenteditable]')) return;
-      const k = e.key;
+      // Case-insensitive, so Shift/Caps Lock still work (the README documents K, M, F).
+      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       if (k === ' ' || k === 'k') {
         if (el.closest('button') && k === ' ') return; // let focused buttons handle space
         e.preventDefault();
@@ -75,7 +68,7 @@ export default function App() {
       ) : (
         <MobileApp screen={screen} setScreen={setScreen} />
       )}
-      <Overlays scan={st.scan} flicker={st.flicker} noise={st.noise} burst={burst} />
+      <Overlays />
     </>
   );
 }

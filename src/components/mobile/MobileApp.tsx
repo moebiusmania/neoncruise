@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { STATIONS, TOTAL, tapeCode, tapeNum } from '../../lib/stations';
 import { insert, station, stationIdx, wantPlay } from '../../lib/player';
 import { tracks } from '../../lib/meta';
-import { useUnwrappedHue } from '../../lib/hooks';
+import { useUnwrappedHue, useViewport } from '../../lib/hooks';
 import { canInstall, promptInstall } from '../../lib/pwa';
 import { Horizon } from '../shared/Horizon';
 import { Cassette } from '../shared/Cassette';
 import { Spectrum } from '../shared/Spectrum';
-import { PlayButton, RoundButton, StatusPill, useNowTrack } from '../shared/Bits';
+import { PlayButton, RoundButton, StatusPill, TrackClock, useNowTrack, useTapeProgress } from '../shared/Bits';
 import { AudioSettings, Card, FxToggles, MiniPlayer, SleepTimer } from '../shared/Panels';
 import { ChevronLeft, ChevronRight, FxIcon, InstallIcon, ShelfIcon } from '../shared/Icons';
 import s from './MobileApp.module.css';
@@ -24,7 +24,8 @@ export function MobileApp({ screen, setScreen }: { screen: Screen; setScreen: (s
   const [sel, setSel] = useState(stationIdx.value);
   const viewHue = screen === 'shelf' ? STATIONS[sel].hue : station.value.hue;
   const hue = useUnwrappedHue(viewHue);
-  const scale = Math.min(1.25, Math.min(innerWidth, innerHeight * 0.55) / 402);
+  const vp = useViewport();
+  const scale = Math.min(1.25, Math.min(vp.w, vp.h * 0.55) / 402);
   const scene = SCENE[screen];
 
   const openShelf = () => {
@@ -46,6 +47,7 @@ function NowScreen({ onShelf, onFx }: { onShelf: () => void; onFx: () => void })
   const i = stationIdx.value;
   const st = station.value;
   const t = useNowTrack();
+  const progress = useTapeProgress();
   return (
     <main class={s.screen} key="now">
       <header class={s.top}>
@@ -78,7 +80,7 @@ function NowScreen({ onShelf, onFx }: { onShelf: () => void; onFx: () => void })
             hue={st.hue}
             name={st.name}
             code={tapeCode(i)}
-            progress={t.progress}
+            progress={progress}
             spinning={wantPlay.value}
           />
         </div>
@@ -88,7 +90,7 @@ function NowScreen({ onShelf, onFx }: { onShelf: () => void; onFx: () => void })
         <div class={s.trackTitle}>{t.title}</div>
         <div class={s.trackArtist}>{t.artist}</div>
         <div class={s.timeline}>
-          <span>{t.pos}</span>
+          <TrackClock />
           <Spectrum bars={36} class={s.spectrum} />
           <span class={s.live}>LIVE</span>
         </div>
