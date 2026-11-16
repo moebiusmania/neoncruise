@@ -12,6 +12,24 @@ export function useMedia(query: string) {
   return match;
 }
 
+/** Viewport size, kept in sync on resize/rotation (rAF-throttled). */
+export function useViewport() {
+  const [size, setSize] = useState(() => ({ w: innerWidth, h: innerHeight }));
+  useEffect(() => {
+    let raf = 0;
+    const on = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => setSize({ w: innerWidth, h: innerHeight }));
+    };
+    addEventListener('resize', on);
+    return () => {
+      cancelAnimationFrame(raf);
+      removeEventListener('resize', on);
+    };
+  }, []);
+  return size;
+}
+
 /**
  * Keeps a hue "unwrapped" so the CSS --hue transition always takes the short way round
  * (e.g. 350 → 385 instead of 350 → 25).

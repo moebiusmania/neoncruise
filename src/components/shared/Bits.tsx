@@ -1,24 +1,50 @@
 import { useComputed } from '@preact/signals';
+import { useEffect, useState } from 'preact/hooks';
 import { history, listeners, tracks } from '../../lib/meta';
-import { fmt, now, status, statusLabel, station, togglePlay, tuneBy, wantPlay } from '../../lib/player';
+import { burstAt, fmt, now, status, statusLabel, station, togglePlay, tuneBy, wantPlay } from '../../lib/player';
+import { settings } from '../../lib/settings';
 import { NextIcon, PauseIcon, PlayIcon, PrevIcon } from './Icons';
 import s from './Bits.module.css';
 
-/** Current track for the active station, with elapsed time since it started. */
+/**
+ * Current track for the active station. Deliberately doesn't read the 1 Hz `now` clock, so the
+ * screens using it don't re-render every second; see `TrackClock` and `useTapeProgress`.
+ */
 export function useNowTrack(id?: string) {
   return useComputed(() => {
-    const sid = id ?? station.value.id;
-    const t = tracks.value[sid];
-    const elapsed = t?.at ? (now.value - t.at) / 1000 : null;
+    const t = tracks.value[id ?? station.value.id];
     return {
       title: t?.title || 'Tuning in…',
       artist: t?.artist || 'Waiting for the signal',
       known: !!t,
-      elapsed,
-      pos: elapsed != null ? fmt(elapsed) : '--:--',
-      /** Tape wind progress for the reels: a loose estimate (live radio has no duration). */
-      progress: elapsed != null ? Math.min(1, elapsed / 300) : 0.5,
     };
+  }).value;
+}
+
+const elapsedSecs = (id?: string) => {
+  const at = tracks.value[id ?? station.value.id]?.at;
+  return at ? (now.value - at) / 1000 : null;
+};
+
+/** Elapsed time since the track started. Only this span re-renders on each clock tick. */
+export function TrackClock({ id }: { id?: string }) {
+  const pos = useComputed(() => {
+    const e = elapsedSecs(id);
+    return e != null ? fmt(e) : '--:--';
+  }).value;
+  return <span>{pos}</span>;
+}
+
+const PROGRESS_STEPS = 40;
+
+/**
+ * Tape wind progress for the reels: a loose estimate (live radio has no duration).
+ * Quantised so the cassette only re-renders when the tape pack visibly changes (~every 7 s).
+ */
+export function useTapeProgress(id?: string) {
+  return useComputed(() => {
+    const e = elapsedSecs(id);
+    return e != null ? Math.round(Math.min(1, e / 300) * PROGRESS_STEPS) / PROGRESS_STEPS : 0.5;
   }).value;
 }
 
@@ -69,8 +95,23 @@ export function RoundButton({ dir }: { dir: 'prev' | 'next' }) {
   );
 }
 
-/** CRT effects stacked over the whole app. */
-export function Overlays({ scan, flicker, noise, burst }: { scan: boolean; flicker: boolean; noise: boolean; burst: boolean }) {
+/**
+ * CRT effects stacked over the whole app. Reads its own signals so that settings changes
+ * (e.g. dragging the volume slider) and tape changes don't re-render the whole tree from <App>.
+ */
+export function Overlays() {
+  const { scan, flicker, noise } = settings.value;
+  const at = burstAt.value;
+  const [burst, setBurst] = useState(false);
+
+  // Static burst on every tape change.
+  useEffect(() => {
+    if (!at) return;
+    setBurst(true);
+    const t = setTimeout(() => setBurst(false), 320);
+    return () => clearTimeout(t);
+  }, [at]);
+
   return (
     <>
       {scan && <div class={s.scan} />}

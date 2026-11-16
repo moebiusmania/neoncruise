@@ -32,6 +32,7 @@ Then open http://localhost:4321/neoncruise/.
 | `bun run dev`     | Start the dev server with hot reload              |
 | `bun run build`   | Build the static site into `dist/`                |
 | `bun run preview` | Serve the production build locally                |
+| `bun run check`   | Type-check the project (also runs in CI)          |
 | `bun run icons`   | Regenerate the PNG app icons from `public/icons/icon.svg` |
 
 The offline service worker only registers in production builds, so use `bun run build && bun run preview` to test installing the app.

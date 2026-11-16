@@ -8,7 +8,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "icons": "bun scripts/icons.ts",
-    "check": "astro check"
+    "check": "astro sync && tsc --noEmit"
   },
   "dependencies": {
     "@astrojs/preact": "^6.1.1",

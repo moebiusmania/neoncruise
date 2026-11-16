@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'preact/hooks';
 import { wantPlay } from '../../lib/player';
-import { fitCanvas, subscribe, vis } from '../../lib/ticker';
+import { fitCanvas, releaseCanvas, subscribe, vis } from '../../lib/ticker';
 import s from './Spectrum.module.css';
 
 /**
@@ -15,7 +15,7 @@ export function Spectrum({ bars = 48, class: cls }: { bars?: number; class?: str
     const heights = new Float32Array(bars);
     const seeds = Float32Array.from({ length: bars }, () => Math.random() * 10);
 
-    return subscribe((t) => {
+    const unsub = subscribe((t) => {
       const [ctx, W, H] = fitCanvas(cv);
       if (!W || !H) return;
       ctx.clearRect(0, 0, W, H);
@@ -52,6 +52,10 @@ export function Spectrum({ bars = 48, class: cls }: { bars?: number; class?: str
         ctx.fillRect(i * (bw + gap), H - bh, bw, bh);
       }
     });
+    return () => {
+      unsub();
+      releaseCanvas(cv);
+    };
   }, [bars]);
 
   return <canvas ref={ref} class={[s.canvas, cls].filter(Boolean).join(' ')} aria-hidden="true" />;

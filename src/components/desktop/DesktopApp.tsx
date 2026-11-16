@@ -3,11 +3,11 @@ import { STATIONS, TOTAL, tapeCode, tapeNum } from '../../lib/stations';
 import { insert, sleepEnd, station, stationIdx, status, wantPlay } from '../../lib/player';
 import { listeners, metaOnline, tracks } from '../../lib/meta';
 import { canInstall, promptInstall } from '../../lib/pwa';
-import { useMedia, useUnwrappedHue } from '../../lib/hooks';
+import { useMedia, useUnwrappedHue, useViewport } from '../../lib/hooks';
 import { Horizon } from '../shared/Horizon';
 import { Cassette } from '../shared/Cassette';
 import { Spectrum } from '../shared/Spectrum';
-import { PlayButton, RoundButton, StatusPill, useHistory, useListeners, useNowTrack } from '../shared/Bits';
+import { PlayButton, RoundButton, StatusPill, TrackClock, useHistory, useListeners, useNowTrack, useTapeProgress } from '../shared/Bits';
 import { AudioSettings, Card, FxToggles, SleepTimer } from '../shared/Panels';
 import { FxIcon, InstallIcon } from '../shared/Icons';
 import s from './DesktopApp.module.css';
@@ -18,7 +18,7 @@ export function DesktopApp({ fxOpen, setFxOpen }: { fxOpen: boolean; setFxOpen: 
   const viewHue = hover != null ? STATIONS[hover].hue : st.hue;
   const hue = useUnwrappedHue(viewHue);
   const wide = useMedia('(min-width: 1240px)');
-  const tall = typeof innerHeight !== 'undefined' ? innerHeight : 900;
+  const tall = useViewport().h;
 
   return (
     <div class={`theme ${s.app}`} style={{ '--hue': hue }} data-fx={fxOpen || wide || undefined}>
@@ -124,6 +124,7 @@ function Stage() {
   const i = stationIdx.value;
   const st = station.value;
   const t = useNowTrack();
+  const progress = useTapeProgress();
   const n = useListeners();
   return (
     <main class={s.stage}>
@@ -146,7 +147,7 @@ function Stage() {
             hue={st.hue}
             name={st.name}
             code={tapeCode(i)}
-            progress={t.progress}
+            progress={progress}
             spinning={wantPlay.value}
           />
         </div>
@@ -160,7 +161,7 @@ function Stage() {
           <div class={s.trackArtist}>{t.artist}</div>
         </div>
         <div class={s.timeline}>
-          <span>{t.pos}</span>
+          <TrackClock />
           <Spectrum bars={64} class={s.spectrum} />
           <span class={s.live}>LIVE</span>
         </div>
