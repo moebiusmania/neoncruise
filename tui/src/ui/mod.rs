@@ -426,7 +426,7 @@ impl Ui {
             // Fresh tape slides into the deck.
             let since = app.since_switch();
             let slide = (1.0 - ease_out(since / 0.55)) * (tape_h * 0.6);
-            let now = app.now_track(app.station().id);
+            let progress = app.now_track(app.station().id).progress();
             let spot = cassette::draw(
                 &mut cv,
                 &cassette::Tape {
@@ -434,7 +434,7 @@ impl Ui {
                     y: tape_y + slide.round() - (slide.round()).rem_euclid(2.0),
                     w: tape_w,
                     hue: app.station().hue,
-                    progress: now.progress,
+                    progress,
                     spin: self.spin,
                 },
             );
@@ -752,7 +752,6 @@ impl Ui {
         }
         fx::glass(buf, r, 0.25);
         rounded_box(buf, r, th.line, None);
-        let now = app.now_track(app.station().id);
         let inner = Rect::new(r.x + 2, r.y + 1, r.width - 4, r.height - 2);
 
         // Transport on the right: ◀◀  ▶/❚❚  ▶▶ as little keycaps.
@@ -803,11 +802,13 @@ impl Ui {
             }
         }
 
+        // Borrowed from the metadata snapshot, so take it after the `app.hits` writes above.
+        let now = app.now_track(app.station().id);
         put(
             buf,
             inner.x,
             inner.y,
-            &trunc(&now.title, text_w as usize),
+            &trunc(now.title, text_w as usize),
             text_w,
             bold(INK),
         );
@@ -815,14 +816,14 @@ impl Ui {
             buf,
             inner.x,
             inner.y + 1,
-            &trunc(&now.artist, text_w as usize),
+            &trunc(now.artist, text_w as usize),
             text_w,
             fg(th.acc2),
         );
 
         // Timeline: elapsed · spectrum · LIVE.
         let y = inner.bottom() - 1;
-        let pos = &now.pos;
+        let pos = &now.pos();
         put(buf, inner.x, y, pos, 8, fg(INK3));
         let live = "L I V E";
         put(

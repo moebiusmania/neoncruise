@@ -5,6 +5,7 @@ use crate::color::approach_hue;
 use crate::meta::{Meta, MetaState, Track};
 use crate::settings::Settings;
 use crate::stations::{STATIONS, Station, index_of, stream_url, wrap_index};
+use crate::sync::LockExt;
 use crate::vis::Vis;
 use ratatui::layout::Rect;
 use std::sync::mpsc::{Receiver, channel};
@@ -113,12 +114,26 @@ pub fn fmt(secs: f64) -> String {
     }
 }
 
-pub struct NowTrack {
-    pub title: String,
-    pub artist: String,
-    pub pos: String,
+/// The current track, borrowed from the metadata snapshot (no per-frame string clones).
+pub struct NowTrack<'a> {
+    pub title: &'a str,
+    pub artist: &'a str,
+    /// Seconds since the track started, when the feed says.
+    pub elapsed: Option<f64>,
+}
+
+impl NowTrack<'_> {
+    /// Elapsed time as `mm:ss`, formatted only where it's shown.
+    pub fn pos(&self) -> String {
+        self.elapsed.map(fmt).unwrap_or_else(|| "--:--".into())
+    }
+
     /// Tape wind progress for the reels: a loose estimate (live radio has no duration).
-    pub progress: f32,
+    pub fn progress(&self) -> f32 {
+        self.elapsed
+            .map(|e| (e / 300.0).min(1.0) as f32)
+            .unwrap_or(0.5)
+    }
 }
 
 impl App {
@@ -374,7 +389,7 @@ impl App {
         }
 
         {
-            let meta = self.meta.lock().unwrap();
+            let meta = self.meta.lock_ok();
             if meta.version != self.snap.version {
                 self.snap = meta.clone();
             }
@@ -391,22 +406,20 @@ impl App {
 
     /* -------------------------------------------------------------- data */
 
-    pub fn now_track(&self, id: &str) -> NowTrack {
+    pub fn now_track(&self, id: &str) -> NowTrack<'_> {
         let t = self.snap.tracks.get(id);
-        let elapsed = t
-            .and_then(|t| t.at)
-            .map(|at| epoch_ms().saturating_sub(at) as f64 / 1000.0);
         NowTrack {
             title: t
-                .map(|t| t.title.clone())
+                .map(|t| t.title.as_str())
                 .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| "Tuning in…".into()),
+                .unwrap_or("Tuning in…"),
             artist: t
-                .map(|t| t.artist.clone())
+                .map(|t| t.artist.as_str())
                 .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| "Waiting for the signal".into()),
-            pos: elapsed.map(fmt).unwrap_or_else(|| "--:--".into()),
-            progress: elapsed.map(|e| (e / 300.0).min(1.0) as f32).unwrap_or(0.5),
+                .unwrap_or("Waiting for the signal"),
+            elapsed: t
+                .and_then(|t| t.at)
+                .map(|at| epoch_ms().saturating_sub(at) as f64 / 1000.0),
         }
     }
 

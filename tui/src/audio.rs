@@ -2,13 +2,14 @@
 //! played through one long-lived rodio source that also mixes tape hiss and
 //! the static burst, and taps the signal for the spectrum analyser.
 
+use crate::sync::LockExt;
 use rodio::{ChannelCount, SampleRate, Source};
 use std::collections::VecDeque;
 use std::io::Read;
 use std::num::NonZero;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering::Relaxed};
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 use std::time::Duration;
 use symphonia::core::audio::SampleBuffer;
@@ -114,7 +115,7 @@ impl Engine {
     }
 
     fn flush(&self) {
-        self.shared.buf.lock().unwrap().clear();
+        self.shared.buf.lock_ok().clear();
         self.shared.primed.store(false, Relaxed);
     }
 
@@ -141,7 +142,7 @@ impl Engine {
     }
 
     pub fn analysis(&self, out: &mut [f32]) {
-        let a = self.shared.analysis.lock().unwrap();
+        let a = self.shared.analysis.lock_ok();
         out.copy_from_slice(&a[..out.len()]);
     }
 }
@@ -161,7 +162,10 @@ fn open_sink() -> Result<rodio::MixerDeviceSink, rodio::DeviceSinkError> {
 struct SyncRead<R>(Mutex<R>);
 impl<R: Read> Read for SyncRead<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.0.get_mut().unwrap().read(buf)
+        self.0
+            .get_mut()
+            .unwrap_or_else(PoisonError::into_inner)
+            .read(buf)
     }
 }
 
@@ -231,7 +235,7 @@ fn stream(shared: &Shared, generation: u64, url: &str) -> anyhow::Result<()> {
             if !live() {
                 return Ok(());
             }
-            let mut buf = shared.buf.lock().unwrap();
+            let mut buf = shared.buf.lock_ok();
             if buf.len() < MAX_BUF {
                 buf.extend(out.iter().copied());
                 break;
@@ -347,7 +351,7 @@ impl Output {
         // Pull a chunk of stream audio, or silence while (re)buffering.
         let mut got = 0;
         {
-            let mut buf = sh.buf.lock().unwrap();
+            let mut buf = sh.buf.lock_ok();
             let primed = sh.primed.load(Relaxed);
             if !primed && buf.len() >= PRIME {
                 sh.primed.store(true, Relaxed);
