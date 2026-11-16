@@ -1,0 +1,114 @@
+name: Release TUI
+
+# Manual only: start it from the Actions tab. It builds the terminal app in tui/ for
+# every platform below, then publishes a GitHub release with the archives attached.
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version:
+    name: Compute version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        run: echo "version=1.0.0-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: macos-arm64
+            os: macos-latest # Apple Silicon (M1 and above)
+            target: aarch64-apple-darwin
+            archive: tar.gz
+          - name: linux-raspberrypi
+            os: ubuntu-24.04-arm # aarch64, covers Raspberry Pi 4 and Zero 2 (64-bit OS)
+            target: aarch64-unknown-linux-gnu
+            archive: tar.gz
+            # Cortex-A53 is the baseline of both boards, so it runs on the Pi 4 (A72) too.
+            rustflags: -C target-cpu=cortex-a53
+          - name: linux-x86_64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - name: windows-x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+    defaults:
+      run:
+        shell: bash
+        working-directory: tui
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      RUSTFLAGS: ${{ matrix.rustflags }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install ALSA headers
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tui
+          key: ${{ matrix.target }}
+
+      - name: Stamp version
+        run: perl -0pi -e 's/^version = ".*"/version = "$ENV{VERSION}"/m' Cargo.toml
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package
+        run: |
+          name="neoncruise-tui-${VERSION}-${{ matrix.name }}"
+          mkdir "$name"
+          exe=neoncruise-tui
+          [ "${{ runner.os }}" = "Windows" ] && exe=neoncruise-tui.exe
+          cp "target/${{ matrix.target }}/release/$exe" README.md ../LICENSE "$name/"
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            7z a "$name.zip" "$name" > /dev/null
+          else
+            tar -czf "$name.tar.gz" "$name"
+          fi
+          echo "ASSET=$name.${{ matrix.archive }}" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.name }}
+          path: tui/${{ env.ASSET }}
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: Neon Cruise TUI ${{ needs.version.outputs.version }}
+          generate_release_notes: true
+          files: dist/*
